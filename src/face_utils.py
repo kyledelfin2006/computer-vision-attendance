@@ -61,7 +61,11 @@ class FaceManager:
         """Recognize a face ROI and return (name, confidence)."""
         if face_roi is None:
             return None, None
-        label, confidence = self.recognizer.predict(face_roi)
+        try:
+            label, confidence = self.recognizer.predict(face_roi)
+        except cv2.error:
+            # Model not trained yet (no registered persons)
+            return None, None
         if confidence < CONFIDENCE_THRESHOLD:
             name = get_person_name_by_id(label)
             return name, confidence
