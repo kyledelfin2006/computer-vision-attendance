@@ -481,31 +481,24 @@ class AttendanceApp:
                 continue
             name, confidence = self.face_manager.recognize_face(roi)
 
-            status_text = ""
-            color = (0, 0, 255)  # red
-            if name:
-                pid = get_person_id_by_name(name)
-                if pid and self.current_session_id:
-                    logged = log_attendance(pid, self.current_session_id)
-                    if logged:
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        self.append_attendance_csv(name, timestamp)
-                        self.attendance_feedback_until[pid] = time.time() + 4.0
-                        status_text = "Registered in session"
-                        color = (0, 255, 0)  # green
-                        self.att_status.config(text=f"{name}\n{timestamp}", fg="green")
-                    elif time.time() < self.attendance_feedback_until.get(pid, 0):
-                        status_text = "Registered in session"
-                        color = (0, 255, 0)  # green
-                    else:
-                        status_text = "Already registered in session"
-                        color = (0, 255, 255)  # yellow
+            status_text = "Unknown"
+            color = (0, 0, 255)  # blue
+
+            pid = get_person_id_by_name(name) if name else None
+
+            if pid and self.current_session_id:
+                if log_attendance(pid, self.current_session_id):
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.append_attendance_csv(name, timestamp)
+                    self.attendance_feedback_until[pid] = time.time() + 4.0
+                    self.att_status.config(text=f"{name}\n{timestamp}", fg="green")
+                    status_text, color = "Registered in session", (0, 255, 0)  # green
+
+                elif time.time() < self.attendance_feedback_until.get(pid, 0):
+                    status_text, color = "Registered in session", (0, 255, 0)  # green
+
                 else:
-                    status_text = "Unknown"
-                    color = (0, 0, 255)
-            else:
-                status_text = "Unknown"
-                color = (0, 0, 255)
+                    status_text, color = "Already registered in session", (0, 255, 255)  # yellow
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             label_text = f"{name if name else 'Unknown'}: {status_text}"
