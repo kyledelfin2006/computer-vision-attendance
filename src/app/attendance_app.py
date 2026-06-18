@@ -19,6 +19,8 @@ from face.face_manager import DNN_PROTOTXT, FaceManager, MODEL_PATH
 # Fixed video display size
 VIDEO_WIDTH = 800
 VIDEO_HEIGHT = 600
+ATT_VIDEO_WIDTH = 700
+ATT_VIDEO_HEIGHT = 525
 APP_NAME = "Face Attendance System"
 
 
@@ -47,6 +49,7 @@ class AttendanceApp:
         self.current_session_name = None
         self.current_session_start_time = None
         self.current_session_csv = None
+        self.attendance_feedback_until = {}
 
         # Build GUI
         self._build_ui()
@@ -98,46 +101,66 @@ class AttendanceApp:
         tk.Label(self.att_frame, text=f"{APP_NAME} - Attendance",
                  font=("Arial", 13, "bold")).pack(pady=(8, 2))
 
-        self.att_video_label = tk.Label(self.att_frame)
-        self.att_video_label.pack(pady=5, fill=tk.BOTH, expand=True)  # reduced pady
+        attendance_body = tk.Frame(self.att_frame)
+        attendance_body.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 8))
+        attendance_body.grid_columnconfigure(0, weight=1)
+        attendance_body.grid_columnconfigure(1, weight=0)
+        attendance_body.grid_rowconfigure(0, weight=1)
 
-        ctrl_att = tk.Frame(self.att_frame)
-        ctrl_att.pack(pady=5)
-        for col in range(4):
-            ctrl_att.grid_columnconfigure(col, weight=1)
-        tk.Label(ctrl_att, text="Session Name:", font=("Arial", 12)).grid(row=0, column=0, padx=8, pady=6, sticky="e")
+        video_area = tk.Frame(attendance_body)
+        video_area.grid(row=0, column=0, sticky="n", padx=(0, 10))
+        self.att_video_label = tk.Label(video_area)
+        self.att_video_label.pack(anchor="n")
+
+        side_panel = tk.Frame(attendance_body, width=260)
+        side_panel.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        side_panel.grid_propagate(False)
+        side_panel.grid_columnconfigure(0, weight=1)
+
+        ctrl_att = tk.Frame(side_panel)
+        ctrl_att.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        ctrl_att.grid_columnconfigure(0, weight=1)
+
+        tk.Label(ctrl_att, text="Session Name:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4), sticky="w")
         self.session_name_entry = tk.Entry(ctrl_att, width=30, font=("Arial", 12))
-        self.session_name_entry.grid(row=0, column=1, padx=8, pady=6, sticky="ew")
+        self.session_name_entry.grid(row=1, column=0, padx=4, pady=(0, 8), sticky="ew")
 
         self.start_btn = tk.Button(ctrl_att, text="Start Attendance", command=self.start_session,
                                    font=("Arial", 12, "bold"), width=18, height=2)
-        self.start_btn.grid(row=0, column=2, padx=8, pady=6, sticky="ew")
+        self.start_btn.grid(row=2, column=0, padx=4, pady=4, sticky="ew")
 
         self.stop_btn = tk.Button(ctrl_att, text="Stop Attendance", command=self.stop_session,
                                   state=tk.DISABLED, font=("Arial", 12, "bold"), width=18, height=2)
-        self.stop_btn.grid(row=0, column=3, padx=8, pady=6, sticky="ew")
+        self.stop_btn.grid(row=3, column=0, padx=4, pady=4, sticky="ew")
 
-        session_time_frame = tk.Frame(self.att_frame)
-        session_time_frame.pack(pady=2)
+        session_time_frame = tk.Frame(side_panel)
+        session_time_frame.grid(row=1, column=0, sticky="ew", pady=(4, 10))
+        session_time_frame.grid_columnconfigure(0, weight=1)
         self.start_time_label = tk.Label(session_time_frame, text="Start Time: --", font=("Arial", 11))
-        self.start_time_label.grid(row=0, column=0, padx=16, pady=2)
+        self.start_time_label.grid(row=0, column=0, padx=4, pady=3, sticky="w")
         self.end_time_label = tk.Label(session_time_frame, text="End Time: --", font=("Arial", 11))
-        self.end_time_label.grid(row=0, column=1, padx=16, pady=2)
+        self.end_time_label.grid(row=1, column=0, padx=4, pady=3, sticky="w")
 
-        self.att_status = tk.Label(self.att_frame, text="", font=("Arial", 12))
-        self.att_status.pack(pady=5)
+        feedback_frame = tk.Frame(side_panel, bd=1, relief=tk.SOLID)
+        feedback_frame.grid(row=2, column=0, sticky="ew", pady=(4, 12))
+        feedback_frame.grid_columnconfigure(0, weight=1)
+        tk.Label(feedback_frame, text="Feedback", font=("Arial", 12, "bold")).grid(row=0, column=0, padx=8, pady=(6, 2), sticky="w")
+        self.att_status = tk.Label(feedback_frame, text="", font=("Arial", 12), wraplength=230, justify=tk.LEFT)
+        self.att_status.grid(row=1, column=0, padx=8, pady=(2, 8), sticky="ew")
 
         # Export section
-        export_frame = tk.Frame(self.att_frame)
-        export_frame.pack(pady=5)
-        export_frame.grid_columnconfigure(1, weight=1)
-        tk.Label(export_frame, text="Export Session:", font=("Arial", 12)).grid(row=0, column=0, padx=8, pady=5, sticky="e")
+        export_frame = tk.Frame(side_panel)
+        export_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        export_frame.grid_columnconfigure(0, weight=1)
+        tk.Label(export_frame, text="Export Session:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4), sticky="w")
         self.session_var = tk.StringVar()
         self.session_combo = ttk.Combobox(export_frame, textvariable=self.session_var,
                                           state="readonly", font=("Arial", 12), width=30)
-        self.session_combo.grid(row=0, column=1, padx=8, pady=5, sticky="ew")
-        tk.Button(export_frame, text="Export CSV", command=self.export_csv,
-                  font=("Arial", 12, "bold"), width=14, height=2).grid(row=0, column=2, padx=8, pady=5, sticky="ew")
+        self.session_combo.grid(row=1, column=0, padx=4, pady=(0, 8), sticky="ew")
+        self.export_btn = tk.Button(export_frame, text="Export CSV", command=self.export_csv,
+                                    bg="orange", activebackground="#ffb347",
+                                    font=("Arial", 12, "bold"), width=14, height=2)
+        self.export_btn.grid(row=2, column=0, padx=4, pady=4, sticky="ew")
         self.refresh_sessions()
 
     # ---------------------- Camera & Video ----------------------
@@ -165,7 +188,7 @@ class AttendanceApp:
             if self.attendance_active:
                 self.process_attendance_frame(frame)
             else:
-                self.display_frame(self.att_video_label, frame)
+                self.display_frame(self.att_video_label, frame, ATT_VIDEO_WIDTH, ATT_VIDEO_HEIGHT)
 
         self.root.after(30, self.update_video)
 
@@ -182,8 +205,8 @@ class AttendanceApp:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         return frame
 
-    def display_frame(self, label, frame):
-        resized = cv2.resize(frame, (VIDEO_WIDTH, VIDEO_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
+    def display_frame(self, label, frame, width=VIDEO_WIDTH, height=VIDEO_HEIGHT):
+        resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_LANCZOS4)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(rgb)
         imgtk = ImageTk.PhotoImage(image=img)
@@ -347,6 +370,7 @@ class AttendanceApp:
         self.current_session_id = create_session(name)
         self.current_session_name = name
         self.current_session_start_time = start_time
+        self.attendance_feedback_until.clear()
         self.current_session_csv = self.write_session_csv(
             self.current_session_id,
             name,
@@ -401,6 +425,11 @@ class AttendanceApp:
                     if logged:
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         self.append_attendance_csv(name, timestamp)
+                        self.attendance_feedback_until[pid] = time.time() + 4.0
+                        status_text = "Registered in session"
+                        color = (0, 255, 0)  # green
+                        self.att_status.config(text=f"{name} registered in session.", fg="green")
+                    elif time.time() < self.attendance_feedback_until.get(pid, 0):
                         status_text = "Registered in session"
                         color = (0, 255, 0)  # green
                     else:
@@ -418,7 +447,7 @@ class AttendanceApp:
             cv2.putText(frame, label_text, (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        self.display_frame(self.att_video_label, frame)
+        self.display_frame(self.att_video_label, frame, ATT_VIDEO_WIDTH, ATT_VIDEO_HEIGHT)
 
     # ---------------------- Export CSV ----------------------
     def refresh_sessions(self):
