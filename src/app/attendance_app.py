@@ -99,32 +99,45 @@ class AttendanceApp:
         self.reg_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.reg_frame, text="Registration")
 
-        # Main container with 2 columns
         reg_main = tk.Frame(self.reg_frame)
         reg_main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        reg_main.grid_columnconfigure(0, weight=1)  # video area
-        reg_main.grid_columnconfigure(1, weight=0)  # side panel (fixed width)
+        reg_main.grid_columnconfigure(0, weight=1)
+        reg_main.grid_columnconfigure(1, weight=0)
         reg_main.grid_rowconfigure(0, weight=1)
 
-        # ---- Left: Video + title ----
         left_frame = tk.Frame(reg_main)
         left_frame.grid(row=0, column=0, sticky="nsew")
-        left_frame.grid_rowconfigure(1, weight=1)
+        left_frame.grid_rowconfigure(1, weight=0)
+        left_frame.grid_rowconfigure(2, weight=1)
+        left_frame.grid_rowconfigure(3, weight=0)
+        left_frame.grid_rowconfigure(4, weight=0)
         left_frame.grid_columnconfigure(0, weight=1)
 
         tk.Label(left_frame, text=f"{APP_NAME} - Registration",
                  font=("Arial", 18, "bold")).grid(row=0, column=0, pady=(0, 5))
 
-        self.reg_video_label = tk.Label(left_frame)
-        self.reg_video_label.grid(row=1, column=0, sticky="nsew", pady=5)
+        # Permanent instruction label for Registration
+        instruction_label = tk.Label(
+            left_frame,
+            text="⚠️ Please face the camera closely and ensure good lighting for accurate recognition.",
+            font=("Arial", 12, "bold"),
+            fg="#cc0000",
+            bg="#ffff99",
+            pady=8,
+            relief=tk.RIDGE,
+            bd=2
+        )
+        instruction_label.grid(row=1, column=0, sticky="ew", pady=(0, 5))
 
-        # Controls (Name entry and buttons) – placed below video
+        self.reg_video_label = tk.Label(left_frame)
+        self.reg_video_label.grid(row=2, column=0, sticky="nsew", pady=5)
+
         ctrl_reg = tk.Frame(left_frame)
-        ctrl_reg.grid(row=2, column=0, pady=5)
+        ctrl_reg.grid(row=3, column=0, pady=5)
         ctrl_reg.grid_columnconfigure(1, weight=1)
         tk.Label(ctrl_reg, text="Name:", font=("Arial", 12)).grid(row=0, column=0, padx=10, pady=6, sticky="e")
-        self.reg_name_entry = tk.Entry(ctrl_reg, width=30, font=("Arial", 12))
-        self.reg_name_entry.grid(row=0, column=1, padx=10, pady=6, sticky="ew")
+        self.reg_name_entry = tk.Entry(ctrl_reg, width=35, font=("Arial", 16))
+        self.reg_name_entry.grid(row=0, column=1, padx=10, pady=6, ipady=6, sticky="ew")
         self.reg_btn = tk.Button(ctrl_reg, text="Register Person", command=self.register_person,
                                  font=("Arial", 12, "bold"), width=18, height=2)
         self.reg_btn.grid(row=0, column=2, padx=10, pady=6, sticky="ew")
@@ -133,25 +146,23 @@ class AttendanceApp:
                                    font=("Arial", 12, "bold"), width=16, height=2)
         self.reset_btn.grid(row=0, column=3, padx=10, pady=6, sticky="ew")
 
-        # Status label below controls (still kept for compatibility)
         self.reg_status = tk.Label(left_frame, text="", font=("Arial", 12))
-        self.reg_status.grid(row=3, column=0, pady=5)
+        self.reg_status.grid(row=4, column=0, pady=5)
 
-        # ---- Right: Side panel for feedback messages ----
+        # Side panel (Feedback)
         side_frame = tk.Frame(reg_main, width=300)
         side_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
-        side_frame.grid_propagate(False)  # keep fixed width
+        side_frame.grid_propagate(False)
         side_frame.grid_rowconfigure(0, weight=0)
         side_frame.grid_rowconfigure(1, weight=1)
         side_frame.grid_columnconfigure(0, weight=1)
 
         tk.Label(side_frame, text="Feedback", font=("Arial", 16, "bold")).grid(row=0, column=0, pady=(0, 10))
 
-        # A larger, scrollable text area for feedback messages (read‑only)
         self.feedback_text = tk.Text(side_frame, wrap=tk.WORD, font=("Arial", 12), height=20,
                                      relief=tk.GROOVE, bd=2)
         self.feedback_text.grid(row=1, column=0, sticky="nsew")
-        self.feedback_text.config(state=tk.DISABLED)  # start as read‑only
+        self.feedback_text.config(state=tk.DISABLED)
 
         # ---- Tab 2: Attendance ----
         self.att_frame = ttk.Frame(self.notebook)
@@ -159,6 +170,19 @@ class AttendanceApp:
 
         tk.Label(self.att_frame, text=f"{APP_NAME} - Attendance",
                  font=("Arial", 13, "bold")).pack(pady=(8, 2))
+
+        # Permanent instruction label for Attendance
+        att_instruction = tk.Label(
+            self.att_frame,
+            text="⚠️ Please face the camera closely and ensure good lighting for accurate recognition.",
+            font=("Arial", 12, "bold"),
+            fg="#cc0000",
+            bg="#ffff99",
+            pady=8,
+            relief=tk.RIDGE,
+            bd=2
+        )
+        att_instruction.pack(fill=tk.X, padx=10, pady=(0, 5))
 
         attendance_body = tk.Frame(self.att_frame)
         attendance_body.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 8))
@@ -186,6 +210,7 @@ class AttendanceApp:
         side_panel.grid_propagate(False)
         side_panel.grid_columnconfigure(0, weight=1)
 
+        # ----- Attendance controls (restored) -----
         ctrl_att = tk.Frame(side_panel)
         ctrl_att.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         ctrl_att.grid_columnconfigure(0, weight=1)
@@ -230,11 +255,16 @@ class AttendanceApp:
                                     bg="orange", activebackground="#ffb347",
                                     font=("Arial", 12, "bold"), width=14, height=2)
         self.export_btn.grid(row=2, column=0, padx=4, pady=4, sticky="ew")
+
+        # Refresh the session list (now that session_combo exists)
         self.refresh_sessions()
 
         # ---- Tab 3: About ----
         self.about_frame = create_about_frame(self.notebook)
         self.notebook.add(self.about_frame, text="About")
+
+
+    # ------------- END OF BUILD UI ------------------------------
 
     # ---------------------- Camera & Video ----------------------
     def start_camera(self):
