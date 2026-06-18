@@ -2,6 +2,7 @@ import csv
 import os
 import re
 import shutil
+import threading
 import time
 import tkinter as tk
 from datetime import datetime
@@ -19,16 +20,16 @@ from face.face_manager import DNN_PROTOTXT, FaceManager, MODEL_PATH
 # Fixed video display size
 VIDEO_WIDTH = 800
 VIDEO_HEIGHT = 600
-ATT_VIDEO_WIDTH = 780
-ATT_VIDEO_HEIGHT = 585
-APP_NAME = "Face Attendance System"
+ATT_VIDEO_WIDTH = 975
+ATT_VIDEO_HEIGHT = 731
+APP_NAME = "Facial Recognition Attendance System"
 
 
 class AttendanceApp:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_NAME)
-        self.root.geometry("1100x780")
+        self.root.geometry("1300x900")
 
         # Initialize database
         init_db()
@@ -51,11 +52,30 @@ class AttendanceApp:
         self.current_session_csv = None
         self.attendance_feedback_until = {}
 
+        # Timer for registration status messages
+        self._reg_status_timer = None  # <-- added
+
         # Build GUI
         self._build_ui()
 
         # Start camera
         self.start_camera()
+
+    def set_reg_status(self, text, fg="black", clear_after=0):
+        """Set the registration status label and optionally clear it after a delay (in ms)."""
+        # Cancel any pending clear timer
+        if hasattr(self, '_reg_status_timer') and self._reg_status_timer:
+            self.root.after_cancel(self._reg_status_timer)
+            self._reg_status_timer = None
+
+        self.reg_status.config(text=text, fg=fg)
+
+        if clear_after > 0:
+            # Schedule clearing the text after the given milliseconds
+            self._reg_status_timer = self.root.after(
+                clear_after,
+                lambda: self.reg_status.config(text="", fg="black")
+            )
 
     # ---------------------- UI Construction ----------------------
     def _build_ui(self):
@@ -68,7 +88,7 @@ class AttendanceApp:
         self.notebook.add(self.reg_frame, text="Registration")
 
         tk.Label(self.reg_frame, text=f"{APP_NAME} - Registration",
-                 font=("Arial", 13, "bold")).pack(pady=(8, 2))
+                 font=("Arial", 18, "bold")).pack(pady=(8, 2))
 
         self.reg_video_label = tk.Label(self.reg_frame)
         self.reg_video_label.pack(pady=5, fill=tk.BOTH, expand=True)  # reduced pady
@@ -110,6 +130,16 @@ class AttendanceApp:
 
         video_area = tk.Frame(attendance_body)
         video_area.grid(row=0, column=0, sticky="n", padx=(0, 10))
+
+        feedback_frame = tk.Frame(video_area, bd=1, relief=tk.SOLID)
+        feedback_frame.pack(fill=tk.X, anchor="w", pady=(0, 6))
+        feedback_frame.grid_columnconfigure(1, weight=1)
+        self.att_feedback_title = tk.Label(feedback_frame, text="Registered:", font=("Arial", 12, "bold"))
+        self.att_feedback_title.grid(row=0, column=0, padx=(8, 4), pady=6, sticky="w")
+        self.att_status = tk.Label(feedback_frame, text="No one registered yet.", font=("Arial", 12),
+                                   wraplength=760, justify=tk.LEFT)
+        self.att_status.grid(row=0, column=1, padx=(4, 8), pady=6, sticky="ew")
+
         self.att_video_label = tk.Label(video_area)
         self.att_video_label.pack(anchor="n")
 
@@ -147,18 +177,9 @@ class AttendanceApp:
         self.end_time_label = tk.Label(session_time_frame, text="End Time: --", font=("Arial", 11))
         self.end_time_label.grid(row=1, column=0, padx=4, pady=3, sticky="w")
 
-        feedback_frame = tk.Frame(side_panel, bd=1, relief=tk.SOLID)
-        feedback_frame.grid(row=2, column=0, sticky="ew", pady=(4, 12))
-        feedback_frame.grid_columnconfigure(0, weight=1)
-        self.att_feedback_title = tk.Label(feedback_frame, text="Registered:", font=("Arial", 12, "bold"))
-        self.att_feedback_title.grid(row=0, column=0, padx=8, pady=(6, 2), sticky="w")
-        self.att_status = tk.Label(feedback_frame, text="No one registered yet.", font=("Arial", 12),
-                                   wraplength=240, justify=tk.LEFT)
-        self.att_status.grid(row=1, column=0, padx=8, pady=(2, 8), sticky="ew")
-
         # Export section
         export_frame = tk.Frame(side_panel)
-        export_frame.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        export_frame.grid(row=2, column=0, sticky="ew", pady=(4, 0))
         export_frame.grid_columnconfigure(0, weight=1)
         tk.Label(export_frame, text="Export Session:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4), sticky="w")
         self.session_var = tk.StringVar()
@@ -247,23 +268,25 @@ class AttendanceApp:
     def register_person(self):
         name = self.reg_name_entry.get().strip()
         if not name:
-            self.reg_status.config(text="Please enter a name", fg="red")
+            self.set_reg_status("Please enter a name", fg="red")
             return
         if get_person_id_by_name(name):
-            self.reg_status.config(text=f"Name '{name}' already registered", fg="red")
+            self.set_reg_status(f"Name '{name}' already registered", fg="red")
             return
 
-        # Disable button and show status
+        # Disable button
         self.reg_btn.config(state=tk.DISABLED)
-        self.reg_status.config(text="Starting 10 second capture. Slowly move your head left and right.", fg="blue")
+
+        # ---- 4‑second capture phase (unchanged) ----
+        self.set_reg_status("Starting 4 second capture. Slowly move your head left and right.", fg="blue")
         self.root.update()
 
         collected = []
         start_time = time.time()
-        capture_interval = 0.25   # seconds between captures
+        capture_interval = 0.25
         last_capture_time = start_time
         count = 0
-        capture_duration = 10.0
+        capture_duration = 4.0
 
         while time.time() - start_time < capture_duration and self.camera_running:
             ret, frame = self.cap.read()
@@ -275,7 +298,6 @@ class AttendanceApp:
             elapsed = time.time() - start_time
             remaining = max(0, capture_duration - elapsed)
 
-            # Capture a face crop at intervals before drawing overlays.
             if elapsed >= 0.5 and time.time() - last_capture_time >= capture_interval and boxes:
                 box = max(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
                 roi = self.face_manager.get_face_roi(frame, box)
@@ -284,7 +306,6 @@ class AttendanceApp:
                     count += 1
                     last_capture_time = time.time()
 
-            # Draw all detected faces (feedback)
             for box in boxes:
                 x1, y1, x2, y2 = box
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -298,44 +319,78 @@ class AttendanceApp:
                 progress=progress
             )
 
-            self.reg_status.config(
-                text=f"Capturing... {remaining:0.1f}s left. Keep moving your head slowly.",
+            self.set_reg_status(
+                f"Capturing... {remaining:0.1f}s left. Keep moving your head slowly.",
                 fg="blue"
             )
-
-            # Display the frame
             self.display_frame(self.reg_video_label, frame)
             self.root.update()
 
-        # If not enough crops, abort
         if len(collected) < 10:
-            self.reg_status.config(text="Not enough face images captured. Please try again.", fg="red")
+            self.set_reg_status("Not enough face images captured. Please try again.", fg="red")
             self.reg_btn.config(state=tk.NORMAL)
             return
 
-        ret, frame = self.cap.read()
-        if ret:
-            frame = cv2.flip(frame, 1)
-            frame = self.draw_registration_feedback(
-                frame,
-                "Processing registration. Please wait...",
-                captured=len(collected),
-                progress=1.0,
-                color=(0, 255, 0)
-            )
-            self.display_frame(self.reg_video_label, frame)
-        self.reg_status.config(text="Processing registration. Please wait...", fg="blue")
+        # ---- Show "Processing" with timer in background ----
+        self.set_reg_status("Processing registration... 0.0s", fg="blue")
         self.root.update()
 
-        # Register the person (trains model)
-        pid = self.face_manager.register_person(name, collected)
-        if pid:
-            self.reg_status.config(text=f"Registration complete: '{name}' saved with ID {pid}.", fg="green")
+        # Store references for the background thread
+        self._reg_name = name
+        self._reg_collected = collected
+        self._reg_start_time = time.time()
+        self._reg_finished = False
+        self._reg_result = None  # will store pid or None
+
+        # Start the background thread for training
+        self._reg_timer_running = True
+        self._update_processing_timer()  # start UI timer updates
+
+        thread = threading.Thread(target=self._do_registration, daemon=True)
+        thread.start()
+
+    def _update_processing_timer(self):
+        """Update the processing status label with elapsed time while training."""
+        if not hasattr(self, '_reg_timer_running') or not self._reg_timer_running:
+            return
+
+        elapsed = time.time() - self._reg_start_time
+        self.set_reg_status(f"Processing registration... {elapsed:.1f}s", fg="blue")
+
+        # Schedule next update after 500 ms if still running
+        if self._reg_timer_running:
+            self.root.after(500, self._update_processing_timer)
+
+    def _do_registration(self):
+        """Run the actual registration (training) in a background thread."""
+        pid = self.face_manager.register_person(self._reg_name, self._reg_collected)
+        self._reg_result = pid
+        self._reg_finished = True
+        self._reg_timer_running = False
+
+        # Schedule the UI update on the main thread
+        self.root.after(0, self._finish_registration)
+
+    def _finish_registration(self):
+        """Called after training completes to show the final status."""
+        if self._reg_result:
+            self.set_reg_status(
+                f"Registration complete: '{self._reg_name}' saved with ID {self._reg_result}.",
+                fg="green",
+                clear_after=20000
+            )
             self.reg_name_entry.delete(0, tk.END)
             self.refresh_sessions()
         else:
-            self.reg_status.config(text="Registration failed (duplicate name or error)", fg="red")
+            self.set_reg_status("Registration failed (duplicate name or error)", fg="red")
         self.reg_btn.config(state=tk.NORMAL)
+
+        # Clean up thread-related variables
+        self._reg_timer_running = False
+        if hasattr(self, '_reg_name'):
+            del self._reg_name
+        if hasattr(self, '_reg_collected'):
+            del self._reg_collected
 
     # ---------------------- Attendance ----------------------
     def safe_filename(self, value):
@@ -393,18 +448,19 @@ class AttendanceApp:
         self.att_status.config(text=f"Session started: {name}\nWaiting for registered users.", fg="green")
         self.refresh_sessions()
 
-    def stop_session(self):
+    def stop_session(self, save_csv=True):
         if self.attendance_active and self.current_session_id:
             end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             end_session(self.current_session_id)
-            records = get_attendance_for_session(self.current_session_id)
-            self.current_session_csv = self.write_session_csv(
-                self.current_session_id,
-                self.current_session_name or "session",
-                records,
-                start_time=self.current_session_start_time,
-                end_time=end_time
-            )
+            if save_csv:
+                records = get_attendance_for_session(self.current_session_id)
+                self.current_session_csv = self.write_session_csv(
+                    self.current_session_id,
+                    self.current_session_name or "session",
+                    records,
+                    start_time=self.current_session_start_time,
+                    end_time=end_time
+                )
             self.attendance_active = False
             self.current_session_id = None
             self.current_session_name = None
@@ -412,7 +468,8 @@ class AttendanceApp:
             self.start_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.DISABLED)
             self.end_time_label.config(text=f"End Time: {end_time}")
-            self.att_status.config(text=f"Session stopped.\nCSV saved.", fg="blue")
+            if save_csv:
+                self.att_status.config(text=f"Session stopped.\nCSV saved.", fg="blue")
             self.refresh_sessions()
 
     def process_attendance_frame(self, frame):
@@ -495,7 +552,7 @@ class AttendanceApp:
             return
 
         if self.attendance_active:
-            self.stop_session()
+            self.stop_session(save_csv=False)
 
         with get_connection() as conn:
             conn.execute("DELETE FROM attendance")
@@ -507,9 +564,16 @@ class AttendanceApp:
             shutil.rmtree("images")
         os.makedirs("images", exist_ok=True)
 
+        if os.path.exists("exports"):
+            shutil.rmtree("exports")
+        os.makedirs("exports", exist_ok=True)
+
         if os.path.exists(MODEL_PATH):
             os.remove(MODEL_PATH)
 
+        self.current_session_csv = None
+        self.session_var.set("")
+        self.session_combo['values'] = []
         self.face_manager.load_model()
         self.refresh_sessions()
         self.reg_status.config(text="All data wiped", fg="blue")
