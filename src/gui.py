@@ -1,27 +1,30 @@
+import csv
+import os
+import shutil
 import time
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from datetime import datetime
+from tkinter import ttk, messagebox
+
 import cv2
 from PIL import Image, ImageTk
-import os
-import csv
-import shutil
-from datetime import datetime
-
 from database import (
     init_db, create_session, end_session, log_attendance,
     get_all_sessions, get_attendance_for_session,
-    get_person_id_by_name, get_person_name_by_id,
-    get_connection
+    get_person_id_by_name, get_connection
 )
 from face_utils import FaceManager
+
+# Fixed video display size
+VIDEO_WIDTH = 800
+VIDEO_HEIGHT = 600
 
 
 class AttendanceApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Face Attendance System")
-        self.root.geometry("900x700")
+        self.root.geometry("1000x750")  # Larger window
 
         # Initialize database
         init_db()
@@ -57,9 +60,9 @@ class AttendanceApp:
         self.reg_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.reg_frame, text="Registration")
 
-        # Video display
+        # Video display – fixed size
         self.reg_video_label = tk.Label(self.reg_frame)
-        self.reg_video_label.pack(pady=10)
+        self.reg_video_label.pack(pady=10, fill=tk.BOTH, expand=True)
 
         # Controls
         ctrl_reg = tk.Frame(self.reg_frame)
@@ -78,9 +81,9 @@ class AttendanceApp:
         self.att_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.att_frame, text="Attendance")
 
-        # Video display
+        # Video display – fixed size
         self.att_video_label = tk.Label(self.att_frame)
-        self.att_video_label.pack(pady=10)
+        self.att_video_label.pack(pady=10, fill=tk.BOTH, expand=True)
 
         # Controls
         ctrl_att = tk.Frame(self.att_frame)
@@ -132,7 +135,7 @@ class AttendanceApp:
                 # Process for attendance (draws boxes, logs, etc.)
                 self.process_attendance_frame(frame)
             else:
-                # Just show raw (or we could show detection here too, but keep it clean)
+                # Just show raw
                 self.display_frame(self.att_video_label, frame)
 
         self.root.after(30, self.update_video)
@@ -155,8 +158,10 @@ class AttendanceApp:
         return frame
 
     def display_frame(self, label, frame):
-        """Display an OpenCV frame on a Tkinter Label."""
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        """Resize the frame to a fixed size and display it on the label."""
+        # Resize to fixed dimensions
+        resized = cv2.resize(frame, (VIDEO_WIDTH, VIDEO_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(rgb)
         imgtk = ImageTk.PhotoImage(image=img)
         label.imgtk = imgtk
@@ -176,28 +181,15 @@ class AttendanceApp:
         self.reg_status.config(text="Capturing faces... Please move your head slowly.", fg="blue")
         self.root.update()
 
-        # Show instruction on the video feed for a moment
-        instruction_frame = None
-        ret, frame = self.cap.read()
-        if ret:
-            frame = cv2.flip(frame, 1)
-            # Overlay instruction
-            cv2.putText(frame, "Please slowly move your head", (50, 200),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 3)
-            cv2.putText(frame, "left and right for the next 5 seconds", (50, 250),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 3)
-            self.display_frame(self.reg_video_label, frame)
-            self.root.update()
-            time.sleep(1.5)  # Show instruction for 1.5 seconds
-
-        # Capture up to 20 frames over 5 seconds
+        # Show instruction overlay and start capture immediately
         collected = []
         start_time = time.time()
-        capture_interval = 0.25  # seconds between captures
+        capture_interval = 0.25   # seconds between captures
         last_capture_time = start_time
         count = 0
+        capture_duration = 8.0    # increased to 8 seconds
 
-        while time.time() - start_time < 5.0 and self.camera_running:
+        while time.time() - start_time < capture_duration and self.camera_running:
             ret, frame = self.cap.read()
             if not ret:
                 break
@@ -209,23 +201,25 @@ class AttendanceApp:
                 x1, y1, x2, y2 = box
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-            # Capture a face crop at intervals
-            if time.time() - last_capture_time >= capture_interval and boxes:
-                # Take the first detected face for simplicity (or could take largest)
+            # ---- Overlay text (top-left corner) - always shown ----
+            elapsed = time.time() - start_time
+            # Instruction stays on the whole time
+            cv2.putText(frame, "Please slowly move your head left/right", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(frame, f"Time left: {max(0, capture_duration - elapsed):.1f}s", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+            cv2.putText(frame, f"Captured: {count}/20", (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            # Capture a face crop at intervals (after a short delay)
+            if elapsed >= 0.5 and time.time() - last_capture_time >= capture_interval and boxes:
+                # Take the first detected face (could be improved to pick the largest)
                 box = boxes[0]
                 roi = self.face_manager.get_face_roi(frame, box)
                 if roi is not None:
                     collected.append(roi)
                     count += 1
                     last_capture_time = time.time()
-                    # Update progress on the frame
-                    cv2.putText(frame, f"Captured {count}/20", (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-            # Show remaining time
-            remaining = max(0, 5.0 - (time.time() - start_time))
-            cv2.putText(frame, f"Time left: {remaining:.1f}s", (10, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
             # Display the frame
             self.display_frame(self.reg_video_label, frame)
