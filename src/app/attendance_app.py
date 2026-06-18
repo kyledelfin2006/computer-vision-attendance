@@ -10,6 +10,7 @@ from tkinter import ttk, messagebox
 
 import cv2
 from PIL import Image, ImageTk
+from app.about_app import create_about_frame
 from data.database import (
     init_db, create_session, end_session, log_attendance,
     get_all_sessions, get_attendance_for_session,
@@ -191,6 +192,10 @@ class AttendanceApp:
                                     font=("Arial", 12, "bold"), width=14, height=2)
         self.export_btn.grid(row=2, column=0, padx=4, pady=4, sticky="ew")
         self.refresh_sessions()
+
+        # ---- Tab 3: About ----
+        self.about_frame = create_about_frame(self.notebook)
+        self.notebook.add(self.about_frame, text="About")
 
     # ---------------------- Camera & Video ----------------------
     def start_camera(self):
