@@ -2,6 +2,8 @@ import sqlite3
 import os
 import shutil
 
+# This file executes a script to delete the entire DB (Python Scripting)
+
 def wipe_database():
     try:
         conn = sqlite3.connect("database.db")
@@ -41,6 +43,7 @@ def delete_folders_and_model():
         print("Model file not found – skipping.")
 
 if __name__ == "__main__":
+
     # Run everything unconditionally
     wipe_database()
     delete_folders_and_model()
