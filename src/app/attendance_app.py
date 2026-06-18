@@ -7,7 +7,6 @@ import time
 import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, messagebox
-
 import cv2
 from PIL import Image, ImageTk
 from app.about_app import create_about_frame
@@ -54,7 +53,7 @@ class AttendanceApp:
         self.attendance_feedback_until = {}
 
         # Timer for registration status messages
-        self._reg_status_timer = None  # <-- added
+        self._reg_status_timer = None
 
         # Build GUI
         self._build_ui()
@@ -63,24 +62,36 @@ class AttendanceApp:
         self.start_camera()
 
     def set_reg_status(self, text, fg="black", clear_after=0):
-        """Set the registration status label and optionally clear it after a delay (in ms)."""
+        """Set the registration status label and append to the side panel."""
         # Cancel any pending clear timer
         if hasattr(self, '_reg_status_timer') and self._reg_status_timer:
             self.root.after_cancel(self._reg_status_timer)
             self._reg_status_timer = None
 
+        # Update the label below the video
         self.reg_status.config(text=text, fg=fg)
 
+        # Append to the side panel with timestamp
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.feedback_text.config(state=tk.NORMAL)
+        self.feedback_text.insert(tk.END, f"[{timestamp}] {text}\n")
+        self.feedback_text.see(tk.END)  # scroll to the latest message
+        self.feedback_text.config(state=tk.DISABLED)
+
         if clear_after > 0:
-            # Schedule clearing the text after the given milliseconds
+            # Clear the label below video after the delay (but not the side panel)
             self._reg_status_timer = self.root.after(
                 clear_after,
                 lambda: self.reg_status.config(text="", fg="black")
             )
 
     # ---------------------- UI Construction ----------------------
+
     def _build_ui(self):
-        # Notebook (tabs)
+        # ---- Style for larger tabs ----
+        style = ttk.Style()
+        style.configure('TNotebook.Tab', font=('Arial', 14, 'bold'), padding=[20, 10])
+
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
@@ -88,33 +99,59 @@ class AttendanceApp:
         self.reg_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.reg_frame, text="Registration")
 
-        tk.Label(self.reg_frame, text=f"{APP_NAME} - Registration",
-                 font=("Arial", 18, "bold")).pack(pady=(8, 2))
+        # Main container with 2 columns
+        reg_main = tk.Frame(self.reg_frame)
+        reg_main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        reg_main.grid_columnconfigure(0, weight=1)  # video area
+        reg_main.grid_columnconfigure(1, weight=0)  # side panel (fixed width)
+        reg_main.grid_rowconfigure(0, weight=1)
 
-        self.reg_video_label = tk.Label(self.reg_frame)
-        self.reg_video_label.pack(pady=5, fill=tk.BOTH, expand=True)  # reduced pady
+        # ---- Left: Video + title ----
+        left_frame = tk.Frame(reg_main)
+        left_frame.grid(row=0, column=0, sticky="nsew")
+        left_frame.grid_rowconfigure(1, weight=1)
+        left_frame.grid_columnconfigure(0, weight=1)
 
-        # Controls – placed closer to video
-        ctrl_reg = tk.Frame(self.reg_frame)
-        ctrl_reg.pack(pady=5)  # less padding
+        tk.Label(left_frame, text=f"{APP_NAME} - Registration",
+                 font=("Arial", 18, "bold")).grid(row=0, column=0, pady=(0, 5))
+
+        self.reg_video_label = tk.Label(left_frame)
+        self.reg_video_label.grid(row=1, column=0, sticky="nsew", pady=5)
+
+        # Controls (Name entry and buttons) – placed below video
+        ctrl_reg = tk.Frame(left_frame)
+        ctrl_reg.grid(row=2, column=0, pady=5)
         ctrl_reg.grid_columnconfigure(1, weight=1)
-        # Larger fonts and wider elements
         tk.Label(ctrl_reg, text="Name:", font=("Arial", 12)).grid(row=0, column=0, padx=10, pady=6, sticky="e")
-        self.reg_name_entry = tk.Entry(ctrl_reg, width=30, font=("Arial", 12))  # wider
+        self.reg_name_entry = tk.Entry(ctrl_reg, width=30, font=("Arial", 12))
         self.reg_name_entry.grid(row=0, column=1, padx=10, pady=6, sticky="ew")
-
-        # Bigger buttons
         self.reg_btn = tk.Button(ctrl_reg, text="Register Person", command=self.register_person,
                                  font=("Arial", 12, "bold"), width=18, height=2)
         self.reg_btn.grid(row=0, column=2, padx=10, pady=6, sticky="ew")
-
         self.reset_btn = tk.Button(ctrl_reg, text="Reset All Data", command=self.reset_database,
                                    bg="red", fg="white", activebackground="#b00000", activeforeground="white",
                                    font=("Arial", 12, "bold"), width=16, height=2)
         self.reset_btn.grid(row=0, column=3, padx=10, pady=6, sticky="ew")
 
-        self.reg_status = tk.Label(self.reg_frame, text="", font=("Arial", 12))
-        self.reg_status.pack(pady=5)
+        # Status label below controls (still kept for compatibility)
+        self.reg_status = tk.Label(left_frame, text="", font=("Arial", 12))
+        self.reg_status.grid(row=3, column=0, pady=5)
+
+        # ---- Right: Side panel for feedback messages ----
+        side_frame = tk.Frame(reg_main, width=300)
+        side_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        side_frame.grid_propagate(False)  # keep fixed width
+        side_frame.grid_rowconfigure(0, weight=0)
+        side_frame.grid_rowconfigure(1, weight=1)
+        side_frame.grid_columnconfigure(0, weight=1)
+
+        tk.Label(side_frame, text="Feedback", font=("Arial", 16, "bold")).grid(row=0, column=0, pady=(0, 10))
+
+        # A larger, scrollable text area for feedback messages (read‑only)
+        self.feedback_text = tk.Text(side_frame, wrap=tk.WORD, font=("Arial", 12), height=20,
+                                     relief=tk.GROOVE, bd=2)
+        self.feedback_text.grid(row=1, column=0, sticky="nsew")
+        self.feedback_text.config(state=tk.DISABLED)  # start as read‑only
 
         # ---- Tab 2: Attendance ----
         self.att_frame = ttk.Frame(self.notebook)
@@ -153,7 +190,8 @@ class AttendanceApp:
         ctrl_att.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         ctrl_att.grid_columnconfigure(0, weight=1)
 
-        tk.Label(ctrl_att, text="Session Name:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4), sticky="w")
+        tk.Label(ctrl_att, text="Session Name:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4),
+                                                                          sticky="w")
         self.session_name_entry = tk.Entry(ctrl_att, width=30, font=("Arial", 12))
         self.session_name_entry.grid(row=1, column=0, padx=4, pady=(0, 8), sticky="ew")
 
@@ -182,7 +220,8 @@ class AttendanceApp:
         export_frame = tk.Frame(side_panel)
         export_frame.grid(row=2, column=0, sticky="ew", pady=(4, 0))
         export_frame.grid_columnconfigure(0, weight=1)
-        tk.Label(export_frame, text="Export Session:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4), sticky="w")
+        tk.Label(export_frame, text="Export Session:", font=("Arial", 12)).grid(row=0, column=0, padx=4, pady=(0, 4),
+                                                                                sticky="w")
         self.session_var = tk.StringVar()
         self.session_combo = ttk.Combobox(export_frame, textvariable=self.session_var,
                                           state="readonly", font=("Arial", 12), width=30)
@@ -238,6 +277,7 @@ class AttendanceApp:
             cv2.putText(frame, label, (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         return frame
+
 
     def display_frame(self, label, frame, width=VIDEO_WIDTH, height=VIDEO_HEIGHT):
         resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_LANCZOS4)
@@ -579,6 +619,11 @@ class AttendanceApp:
         self.start_time_label.config(text="Start Time: --")
         self.end_time_label.config(text="End Time: --")
         self.reg_name_entry.delete(0, tk.END)
+
+        # Clear the feedback panel
+        self.feedback_text.config(state=tk.NORMAL)
+        self.feedback_text.delete(1.0, tk.END)
+        self.feedback_text.config(state=tk.DISABLED)
 
     # ---------------------- Cleanup ----------------------
     def on_closing(self):
