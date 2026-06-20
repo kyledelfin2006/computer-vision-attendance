@@ -2,7 +2,7 @@ import sqlite3
 import os
 import shutil
 
-# This file executes a script to delete the entire DB (Python Scripting)
+"""Delete the images and exports folders and remove the trained face recognition model file."""
 
 def wipe_database():
     try:
@@ -21,6 +21,7 @@ def wipe_database():
         print(f"Error clearing database: {e}")
 
 def delete_folders_and_model():
+    """Delete the images and exports folders and remove the trained face recognition model file."""
     folders = ["images", "exports"]
     for folder in folders:
         if os.path.exists(folder):

@@ -174,7 +174,7 @@ class AttendanceApp:
         # Permanent instruction label for Attendance
         att_instruction = tk.Label(
             self.att_frame,
-            text="⚠️ Please face the camera closely and ensure good lighting for accurate recognition.",
+            text="⚠️Please ensure your face is in the same lighting and position during registration to accurately process",
             font=("Arial", 12, "bold"),
             fg="#cc0000",
             bg="#ffff99",
