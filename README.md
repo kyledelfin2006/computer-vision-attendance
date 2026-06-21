@@ -23,7 +23,7 @@ A Offline-based desktop application for **offline attendance tracking using faci
 - [Setup & Installation](#setup--installation)
 - [Troubleshooting](#troubleshooting)
 - [Data Management](#data-management)
-- [Updates](#Upcoming Improvements)
+- [Updates](#Upcoming--Improvements)
 - [License](#license)
 
 ---
@@ -287,7 +287,7 @@ This deletes the database, the `images/` and `exports/` folders, and the model f
 
 ---
 
-## Upcoming Improvements
+### Upcoming Improvements
 I plan to replace the current face detection model with a more robust, modern architecture (e.g., YOLO‑face or RetinaFace) to improve accuracy in challenging lighting and pose conditions. This upgrade will also bring:
 
 Better handling of partial occlusions and side profiles.
